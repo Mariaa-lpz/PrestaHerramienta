@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light" data-accent="amber">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PrestaHerramienta — Economía Colaborativa Vecinal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- SIDEBAR DE NAVEGACIÓN -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-mark">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-name">PrestaHerramienta</span>
+            <span class="brand-sub">Residencial Los Olivos · Jaén</span>
+          </div>
+        </div>
+        <button class="icon-btn mobile-only" id="btn-close-sidebar" aria-label="Cerrar menú">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Plataforma</div>
+        <button class="nav-item active" data-view="buscar">
+          <i data-lucide="compass"></i>
+          <span>Explorar catálogo</span>
+        </button>
+        <button class="nav-item" data-view="publicar">
+          <i data-lucide="plus-square"></i>
+          <span>Publicar herramienta</span>
+        </button>
+        <button class="nav-item" data-view="solicitudes">
+          <i data-lucide="arrow-left-right"></i>
+          <span>Préstamos y solicitudes</span>
+          <span class="nav-pill" id="badge-pendientes">0</span>
+        </button>
+        <button class="nav-item" data-view="incidencias">
+          <i data-lucide="shield-alert"></i>
+          <span>Incidencias y comunidad</span>
+          <span class="nav-pill warn" id="badge-incidencias" style="display:none">0</span>
+        </button>
+
+        <div class="nav-section-label">Preferencias</div>
+        <button class="nav-item" data-view="configuracion">
+          <i data-lucide="sliders-horizontal"></i>
+          <span>Configuración y aspecto</span>
+        </button>
+      </nav>
+
+      <!-- CONMUTADOR RÁPIDO DE VECINO (IDEAL PARA DEMOS Y PRUEBAS) -->
+      <div class="sidebar-footer">
+        <div class="demo-switcher">
+          <label for="quick-user-select">
+            <i data-lucide="users"></i> Vecino activo (Simulación)
+          </label>
+          <select id="quick-user-select"></select>
+        </div>
+        <div id="sidebar-user-card" class="user-card"></div>
+      </div>
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn mobile-only" id="btn-open-sidebar" aria-label="Abrir menú">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="breadcrumb" id="topbar-breadcrumb">
+            <span>Comunidad</span>
+            <i data-lucide="chevron-right"></i>
+            <strong id="topbar-title">Explorar catálogo</strong>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <button class="icon-btn theme-quick-btn" id="btn-quick-theme" title="Alternar modo claro/oscuro">
+            <i data-lucide="moon" id="theme-icon"></i>
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="navegarA('publicar')">
+            <i data-lucide="plus"></i>
+            <span>Compartir herramienta</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="content-area">
+        <!-- ========================================================= -->
+        <!-- VISTA 1: InterfazBuscarHerramientas                       -->
+        <!-- ========================================================= -->
+        <section id="view-buscar" class="view active">
+          <div class="page-header">
+            <div>
+              <h1>Herramientas de tu comunidad</h1>
+              <p>Pide prestado lo que necesitas a tus vecinos de portal sin comprar herramientas de un solo uso.</p>
+            </div>
+            <div class="kpi-strip" id="kpi-strip"></div>
+          </div>
+
+          <!-- Barra de filtros profesional -->
+          <div class="filter-panel">
+            <div class="search-input-box">
+              <i data-lucide="search"></i>
+              <input type="text" id="filtro-texto" placeholder="Buscar por nombre, marca, accesorio o descripción..." />
+              <button class="clear-btn" id="btn-clear-search" style="display:none"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="filter-controls">
+              <select id="filtro-estado">
+                <option value="">Estado: Todos</option>
+                <option value="Disponible">Solo disponibles</option>
+                <option value="Prestada">Actualmente prestadas</option>
+              </select>
+
+              <select id="filtro-precio">
+                <option value="">Tarifa: Todas</option>
+                <option value="gratis">Préstamo gratuito (0 €)</option>
+                <option value="pago">Con fianza / tarifa</option>
+              </select>
+
+              <select id="filtro-orden">
+                <option value="recientes">Ordenar: Más recientes</option>
+                <option value="valoradas">Mejor valoradas</option>
+                <option value="precio-asc">Tarifa: menor a mayor</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Píldoras de categorías -->
+          <div class="category-pills" id="category-pills">
+            <button class="cat-pill active" data-cat="">Todas</button>
+            <button class="cat-pill" data-cat="Eléctrica"><i data-lucide="zap"></i> Eléctricas</button>
+            <button class="cat-pill" data-cat="Manual"><i data-lucide="hammer"></i> Manuales</button>
+            <button class="cat-pill" data-cat="Jardinería"><i data-lucide="sprout"></i> Jardinería</button>
+            <button class="cat-pill" data-cat="Medición"><i data-lucide="ruler"></i> Medición y láser</button>
+            <button class="cat-pill" data-cat="Pintura"><i data-lucide="paint-roller"></i> Pintura y hogar</button>
+          </div>
+
+          <div id="grid-herramientas" class="tools-grid"></div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 2: InterfazPublicarHerramienta                      -->
+        <!-- ========================================================= -->
+        <section id="view-publicar" class="view">
+          <div class="page-header">
+            <div>
+              <h1>Publicar nueva herramienta</h1>
+              <p>Añade una herramienta al inventario comunitario. Puedes prestarla gratis o fijar una tarifa simbólica.</p>
+            </div>
+          </div>
+
+          <div class="publish-layout">
+            <form id="form-publicar" class="panel form-panel">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="pub-titulo">Nombre de la herramienta *</label>
+                  <input type="text" id="pub-titulo" required placeholder="Ej: Lijadora orbital Makita 300W" />
+                </div>
+                <div class="form-group">
+                  <label for="pub-tipo">Categoría *</label>
+                  <select id="pub-tipo" required>
+                    <option value="Eléctrica">Eléctrica</option>
+                    <option value="Manual">Manual</option>
+                    <option value="Jardinería">Jardinería</option>
+                    <option value="Medición">Medición</option>
+                    <option value="Pintura">Pintura</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="pub-descripcion">Descripción detallada y accesorios *</label>
+                <textarea id="pub-descripcion" rows="3" required placeholder="Especifica potencia, si incluye maletín, baterías, brocas o consumibles..."></textarea>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="pub-precio">Tarifa / Fianza diaria (€) *</label>
+                  <input type="number" id="pub-precio" min="0" max="100" step="0.5" value="0" required />
+                  <span class="field-hint">0 € indica cesión gratuita entre vecinos.</span>
+                </div>
+                <div class="form-group">
+                  <label for="pub-disponibilidad">Franja de entrega habitual *</label>
+                  <input type="text" id="pub-disponibilidad" required placeholder="Ej: Lunes a viernes de 18:30 a 21:00" />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="pub-condiciones">Condiciones de uso y devolución *</label>
+                <input type="text" id="pub-condiciones" required placeholder="Ej: Devolver limpia y con la batería cargada." />
+              </div>
+
+              <div class="form-group">
+                <label for="pub-foto">Fotografía (URL o elige una galería rápida)</label>
+                <input type="url" id="pub-foto" placeholder="https://images.unsplash.com/..." />
+                <div class="preset-photos" id="preset-photos">
+                  <button type="button" class="preset-btn" data-url="https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&w=800&q=80">Taladro</button>
+                  <button type="button" class="preset-btn" data-url="https://images.unsplash.com/photo-1572981779307-38b8cabb2407?auto=format&fit=crop&w=800&q=80">Sierra / Lijadora</button>
+                  <button type="button" class="preset-btn" data-url="https://images.unsplash.com/photo-1581147036324-c17ac41dfa6c?auto=format&fit=crop&w=800&q=80">Maletín llaves</button>
+                  <button type="button" class="preset-btn" data-url="https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=800&q=80">Pintura / Rodillo</button>
+                </div>
+              </div>
+
+              <div class="form-footer">
+                <button type="button" class="btn btn-ghost" onclick="navegarA('buscar')">Cancelar</button>
+                <button type="submit" class="btn btn-primary">
+                  <i data-lucide="check-circle-2"></i> Publicar en la comunidad
+                </button>
+              </div>
+            </form>
+
+            <!-- VISTA PREVIA EN TIEMPO REAL -->
+            <div class="preview-column">
+              <div class="preview-label"><i data-lucide="eye"></i> Vista previa en el catálogo</div>
+              <div id="publish-live-preview"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 3: InterfazGestionarSolicitudes                     -->
+        <!-- ========================================================= -->
+        <section id="view-solicitudes" class="view">
+          <div class="page-header">
+            <div>
+              <h1>Préstamos y solicitudes</h1>
+              <p>Gestiona peticiones recibidas, ampliaciones de fecha, devoluciones y valoraciones.</p>
+            </div>
+          </div>
+
+          <div class="segmented-tabs" id="loans-tabs">
+            <button class="seg-tab active" data-tab="recibidas">
+              Solicitudes recibidas <span class="tab-count" id="count-recibidas">0</span>
+            </button>
+            <button class="seg-tab" data-tab="activos">
+              Préstamos en curso <span class="tab-count" id="count-activos">0</span>
+            </button>
+            <button class="seg-tab" data-tab="enviadas">
+              Mis solicitudes enviadas <span class="tab-count" id="count-enviadas">0</span>
+            </button>
+            <button class="seg-tab" data-tab="historial">
+              Historial finalizado <span class="tab-count" id="count-historial">0</span>
+            </button>
+          </div>
+
+          <div id="loans-tab-content" class="loans-list"></div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 4: Incidencias y Comunidad                          -->
+        <!-- ========================================================= -->
+        <section id="view-incidencias" class="view">
+          <div class="page-header">
+            <div>
+              <h1>Registro de incidencias y reputación</h1>
+              <p>Transparencia comunitaria: seguimiento de partes de avería y estado del inventario.</p>
+            </div>
+          </div>
+
+          <div class="two-col-grid">
+            <div class="panel">
+              <div class="panel-header">
+                <h3><i data-lucide="alert-triangle"></i> Partes de incidencia registrados</h3>
+              </div>
+              <div id="lista-incidencias" class="stack-gap"></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3><i data-lucide="award"></i> Vecinos colaboradores</h3>
+              </div>
+              <div id="lista-vecinos-comunidad" class="stack-gap"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 5: InterfazConfiguracion (Modo oscuro y ajustes)    -->
+        <!-- ========================================================= -->
+        <section id="view-configuracion" class="view">
+          <div class="page-header">
+            <div>
+              <h1>Configuración y personalización</h1>
+              <p>Adapta la apariencia de PrestaHerramienta, edita tu perfil de vecino o gestiona los datos.</p>
+            </div>
+          </div>
+
+          <div class="settings-grid">
+            <!-- Apariencia y Tema -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3><i data-lucide="palette"></i> Apariencia de la interfaz</h3>
+                <p>Elige el modo de color que prefieras. Se guarda automáticamente.</p>
+              </div>
+
+              <div class="theme-cards" id="theme-selector">
+                <button type="button" class="theme-option" data-theme-val="light">
+                  <div class="theme-preview light-prev">
+                    <div class="tp-bar"></div>
+                    <div class="tp-card"></div>
+                  </div>
+                  <span>Modo Claro</span>
+                </button>
+
+                <button type="button" class="theme-option" data-theme-val="dark">
+                  <div class="theme-preview dark-prev">
+                    <div class="tp-bar"></div>
+                    <div class="tp-card"></div>
+                  </div>
+                  <span>Modo Oscuro</span>
+                </button>
+
+                <button type="button" class="theme-option" data-theme-val="system">
+                  <div class="theme-preview sys-prev">
+                    <div class="tp-bar"></div>
+                    <div class="tp-card"></div>
+                  </div>
+                  <span>Sistema</span>
+                </button>
+              </div>
+
+              <div class="form-group" style="margin-top: 1.5rem;">
+                <label>Color de acento de marca</label>
+                <div class="accent-swatches" id="accent-selector">
+                  <button type="button" class="swatch active" data-accent-val="amber" style="--sw:#d97706" title="Ámbar Industrial"></button>
+                  <button type="button" class="swatch" data-accent-val="emerald" style="--sw:#059669" title="Verde Bosque"></button>
+                  <button type="button" class="swatch" data-accent-val="blue" style="--sw:#2563eb" title="Azul Técnico"></button>
+                  <button type="button" class="swatch" data-accent-val="rose" style="--sw:#e11d48" title="Carmesí"></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Perfil del Vecino -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3><i data-lucide="user-check"></i> Datos del vecino activo</h3>
+                <p>Información visible para otros miembros de la comunidad.</p>
+              </div>
+              <form id="form-perfil" class="stack-gap">
+                <div class="form-group">
+                  <label>Nombre completo</label>
+                  <input type="text" id="cfg-nombre" required />
+                </div>
+                <div class="form-group">
+                  <label>Portal / Vivienda</label>
+                  <input type="text" id="cfg-direccion" required />
+                </div>
+                <div class="form-group">
+                  <label>Correo electrónico</label>
+                  <input type="email" id="cfg-email" required />
+                </div>
+                <button type="submit" class="btn btn-primary">Guardar cambios de perfil</button>
+              </form>
+            </div>
+
+            <!-- Alta de Nuevo Vecino y Datos Demo -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3><i data-lucide="user-plus"></i> Registrar nuevo vecino (Caso de Uso)</h3>
+                <p>Ejecuta el flujo <code>ControladorRegistro.registrarVecino()</code>.</p>
+              </div>
+              <form id="form-registro-vecino" class="stack-gap">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Nombre *</label>
+                    <input type="text" id="reg-nombre" required placeholder="Ej: Elena Morales" />
+                  </div>
+                  <div class="form-group">
+                    <label>Portal / Piso *</label>
+                    <input type="text" id="reg-direccion" required placeholder="Ej: Portal 2, 4ºA" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Email *</label>
+                    <input type="email" id="reg-email" required placeholder="elena@comunidad.es" />
+                  </div>
+                  <div class="form-group">
+                    <label>Contraseña *</label>
+                    <input type="password" id="reg-pass" required minlength="4" placeholder="••••" />
+                  </div>
+                </div>
+                <label class="checkbox-row">
+                  <input type="checkbox" id="reg-terminos" required />
+                  <span>Acepto las normas de buen uso de PrestaHerramienta.</span>
+                </label>
+                <button type="submit" class="btn btn-outline">Registrar vecino en comunidad</button>
+              </form>
+            </div>
+
+            <!-- Zona de Datos -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3><i data-lucide="database"></i> Almacenamiento local</h3>
+                <p>Los datos persisten en tu navegador mediante <code>localStorage</code>.</p>
+              </div>
+              <p style="font-size:0.88rem; color:var(--text-muted); margin-bottom:1rem;">
+                Si quieres reiniciar la demostración desde cero con los datos iniciales de la comunidad, pulsa el botón inferior.
+              </p>
+              <button type="button" class="btn btn-danger-outline" id="btn-reset-demo">
+                <i data-lucide="rotate-ccw"></i> Restaurar datos de demostración
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODALES PROFESIONALES (CERO PROMPT/ALERT NATIVOS)         -->
+  <!-- ========================================================= -->
+
+  <!-- 1. Modal Detalle de Herramienta -->
+  <div id="modal-detalle" class="modal-backdrop">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <span class="badge-mono" id="det-id">#HERR-000</span>
+        <button class="icon-btn" data-close-modal="modal-detalle"><i data-lucide="x"></i></button>
+      </div>
+      <div id="det-body"></div>
+    </div>
+  </div>
+
+  <!-- 2. Modal InterfazSolicitarPrestamo -->
+  <div id="modal-solicitar" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Solicitar préstamo</h3>
+        <button class="icon-btn" data-close-modal="modal-solicitar"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-solicitar">
+        <input type="hidden" id="sol-id-herramienta" />
+        <div class="modal-tool-banner" id="sol-tool-summary"></div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="sol-fecha-inicio">Fecha de recogida *</label>
+            <input type="date" id="sol-fecha-inicio" required />
+          </div>
+          <div class="form-group">
+            <label for="sol-fecha-fin">Fecha de devolución *</label>
+            <input type="date" id="sol-fecha-fin" required />
+          </div>
+        </div>
+
+        <div class="cost-summary-box" id="sol-cost-box"></div>
+
+        <div class="form-group">
+          <label for="sol-mensaje">Mensaje para el propietario *</label>
+          <textarea id="sol-mensaje" rows="3" required placeholder="Hola vecino, la necesito para montar unas baldas en el salón. La cuido mucho."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close-modal="modal-solicitar">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Confirmar solicitud</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Modal Rechazar Solicitud -->
+  <div id="modal-rechazar" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Rechazar solicitud</h3>
+        <button class="icon-btn" data-close-modal="modal-rechazar"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-rechazar">
+        <input type="hidden" id="rec-id-solicitud" />
+        <div class="form-group">
+          <label>Motivo del rechazo *</label>
+          <div class="chip-group" id="reject-chips">
+            <button type="button" class="chip" data-reason="La necesito yo mismo en esas fechas">La necesito ese finde</button>
+            <button type="button" class="chip" data-reason="Está pendiente de mantenimiento">En mantenimiento</button>
+            <button type="button" class="chip" data-reason="No estaré en casa para entregarla">No estaré en casa</button>
+          </div>
+          <textarea id="rec-motivo" rows="2" required placeholder="Indica brevemente el motivo al vecino..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close-modal="modal-rechazar">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Rechazar solicitud</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. Modal Solicitar Ampliación de Préstamo (SolicitudAmpliacion) -->
+  <div id="modal-ampliar" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Solicitar ampliación de plazo</h3>
+        <button class="icon-btn" data-close-modal="modal-ampliar"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-ampliar">
+        <input type="hidden" id="amp-id-prestamo" />
+        <div class="form-group">
+          <label>Nueva fecha de devolución *</label>
+          <input type="date" id="amp-nueva-fecha" required />
+        </div>
+        <div class="form-group">
+          <label>Motivo de la ampliación *</label>
+          <textarea id="amp-motivo" rows="3" required placeholder="Ej: Aún no he terminado de pintar la habitación, ¿podría devolverla un día más tarde?"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close-modal="modal-ampliar">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Enviar solicitud de ampliación</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. Modal Devolver y Valorar (Resena) -->
+  <div id="modal-devolver" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Devolver herramienta y valorar</h3>
+        <button class="icon-btn" data-close-modal="modal-devolver"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-devolver">
+        <input type="hidden" id="dev-id-prestamo" />
+        <input type="hidden" id="dev-puntuacion" value="5" />
+
+        <div class="form-group">
+          <label>Puntuación de la experiencia</label>
+          <div class="star-picker" id="star-picker">
+            <button type="button" class="star-btn active" data-val="1">★</button>
+            <button type="button" class="star-btn active" data-val="2">★</button>
+            <button type="button" class="star-btn active" data-val="3">★</button>
+            <button type="button" class="star-btn active" data-val="4">★</button>
+            <button type="button" class="star-btn active" data-val="5">★</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="dev-comentario">Reseña para la comunidad *</label>
+          <textarea id="dev-comentario" rows="3" required placeholder="¿Funcionaba bien? ¿Fue fácil coordinarse con el vecino?"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="dev-observaciones">Estado de entrega</label>
+          <select id="dev-observaciones">
+            <option value="Devuelta limpia y en perfecto estado">Devuelta limpia y en perfecto estado</option>
+            <option value="Devuelta con desgaste normal de uso">Devuelta con desgaste normal de uso</option>
+          </select>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close-modal="modal-devolver">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Confirmar devolución</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. Modal Reportar Incidencia (Incidencia) -->
+  <div id="modal-incidencia" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Reportar incidencia en préstamo</h3>
+        <button class="icon-btn" data-close-modal="modal-incidencia"><i data-lucide="x"></i></button>
+      </div>
+      <form id="form-incidencia">
+        <input type="hidden" id="inc-id-prestamo" />
+        <div class="form-group">
+          <label>Nivel de gravedad *</label>
+          <select id="inc-gravedad" required>
+            <option value="Leve">Leve (retraso menor o falta de limpieza)</option>
+            <option value="Moderada">Moderada (accesorio extraviado o desgaste)</option>
+            <option value="Grave">Grave (avería o rotura de la herramienta)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Descripción detallada de lo ocurrido *</label>
+          <textarea id="inc-descripcion" rows="3" required placeholder="Explica qué ha ocurrido para dejar constancia en el historial..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-close-modal="modal-incidencia">Cancelar</button>
+          <button type="submit" class="btn btn-danger">Registrar incidencia</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOASTS -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ARQUITECTURA BCE ESTRICTA -->
+  <script src="js/entities.js"></script>
+  <script src="js/controllers.js"></script>
+  <script src="js/boundaries.js"></script>
+</body>
+</html>

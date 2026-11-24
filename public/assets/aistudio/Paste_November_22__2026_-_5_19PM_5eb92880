@@ -1,0 +1,864 @@
+/**
+ * CAPA <<boundary>> — PrestaHerramienta
+ * Interfaces de usuario que gestionan el DOM y delegan en la capa <<control>>[cite: 3, 5].
+ */
+
+const ctrlRegistro = new ControladorRegistro();
+const ctrlPublicar = new ControladorPublicarHerramienta();
+const ctrlBuscar = new ControladorBuscarHerramientas();
+const ctrlSolicitar = new ControladorSolicitarPrestamo();
+const ctrlGestionar = new ControladorGestionarSolicitudes();
+
+const FALLBACK_IMG = "https://images.unsplash.com/photo-1581147036324-c17ac41dfa6c?auto=format&fit=crop&w=800&q=80";
+
+function toast(mensaje, tipo = "success") {
+  const container = document.getElementById("toast-container");
+  const el = document.createElement("div");
+  el.className = `toast ${tipo}`;
+  el.textContent = mensaje;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+
+function abrirModal(id) {
+  document.getElementById(id).classList.add("open");
+}
+
+function cerrarModal(id) {
+  document.getElementById(id).classList.remove("open");
+}
+
+/* ==========================================================================
+   BOUNDARY 1: InterfazBuscarHerramientas
+   ========================================================================== */
+class InterfazBuscarHerramientas {
+  constructor() {
+    this.categoriaActiva = "";
+    this.bindEvents();
+  }
+
+  bindEvents() {
+    const inputTexto = document.getElementById("filtro-texto");
+    const btnClear = document.getElementById("btn-clear-search");
+
+    inputTexto.addEventListener("input", () => {
+      btnClear.style.display = inputTexto.value ? "block" : "none";
+      this.renderizar();
+    });
+
+    btnClear.addEventListener("click", () => {
+      inputTexto.value = "";
+      btnClear.style.display = "none";
+      this.renderizar();
+    });
+
+    ["filtro-estado", "filtro-precio", "filtro-orden"].forEach(id => {
+      document.getElementById(id).addEventListener("change", () => this.renderizar());
+    });
+
+    document.querySelectorAll(".cat-pill").forEach(pill => {
+      pill.addEventListener("click", () => {
+        document.querySelectorAll(".cat-pill").forEach(p => p.classList.remove("active"));
+        pill.classList.add("active");
+        this.categoriaActiva = pill.dataset.cat;
+        this.renderizar();
+      });
+    });
+  }
+
+  renderKPIs() {
+    const total = RepositorioSistema.herramientas.length;
+    const disponibles = RepositorioSistema.herramientas.filter(h => h.estado === "Disponible").length;
+    const ahorroEstimado = (RepositorioSistema.prestamos.length + 12) * 38;
+
+    document.getElementById("kpi-strip").innerHTML = `
+      <div class="kpi-box"><span>Disponibles ahora</span><strong>${disponibles} / ${total}</strong></div>
+      <div class="kpi-box"><span>Vecinos activos</span><strong>${RepositorioSistema.vecinos.length}</strong></div>
+      <div class="kpi-box"><span>Ahorro comunitario</span><strong>~${ahorroEstimado} €</strong></div>
+    `;
+  }
+
+  renderizar() {
+    this.renderKPIs();
+    const lista = ctrlBuscar.filtrarHerramientas({
+      texto: document.getElementById("filtro-texto").value,
+      tipo: this.categoriaActiva,
+      estado: document.getElementById("filtro-estado").value,
+      precio: document.getElementById("filtro-precio").value,
+      orden: document.getElementById("filtro-orden").value
+    });
+
+    const grid = document.getElementById("grid-herramientas");
+    if (!lista.length) {
+      grid.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1;">
+          <i data-lucide="search-x"></i>
+          <h3>No hay herramientas que coincidan</h3>
+          <p>Prueba a limpiar los filtros o sé el primero en publicar una herramienta en esta categoría.</p>
+        </div>
+      `;
+      lucide.createIcons();
+      return;
+    }
+
+    grid.innerHTML = lista.map(h => this.generarTarjetaHTML(h)).join("");
+    lucide.createIcons();
+  }
+
+  generarTarjetaHTML(h, esPreview = false) {
+    const prop = RepositorioSistema.vecinos.find(v => v.idVecino === h.idPropietario) || ctrlRegistro.vecinoActual;
+    const esMia = !esPreview && ctrlRegistro.vecinoActual?.idVecino === h.idPropietario;
+    const val = esPreview ? { media: "Nuevo", total: 0 } : ctrlBuscar.obtenerMediaValoracion(h.idHerramienta);
+
+    return `
+      <article class="tool-card">
+        <div class="tool-media">
+          <img src="${h.foto}" alt="${h.titulo}" onerror="this.src='${FALLBACK_IMG}'" />
+          <div class="media-badges">
+            <span class="status-badge ${h.estado}"><span class="dot"></span>${h.estado}</span>
+            <span class="price-badge">${h.precio === 0 ? "Gratis" : h.precio.toFixed(2) + " €/día"}</span>
+          </div>
+        </div>
+
+        <div class="tool-content">
+          <div class="tool-top-row">
+            <span>${h.tipo}</span>
+            <span class="rating-tag"><span>★</span> ${val.total > 0 ? `${val.media} (${val.total})` : "Sin reseñas"}</span>
+          </div>
+
+          <h3 class="tool-title">${h.titulo}</h3>
+          <p class="tool-desc">${h.descripcion}</p>
+
+          <div class="tool-owner-row">
+            <div class="owner-chip">
+              <div class="mini-av">${prop ? prop.obtenerIniciales() : "VE"}</div>
+              <div>
+                <strong>${prop ? prop.nombre : "Vecino"}</strong>
+                <div style="font-size:0.72rem; color:var(--text-muted)">${prop ? prop.direccion : ""}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tool-footer-actions">
+            <button type="button" class="btn btn-outline btn-sm" ${esPreview ? "disabled" : `onclick="uiBuscar.verDetalle(${h.idHerramienta})"`}>
+              Ficha
+            </button>
+            ${
+              esPreview
+                ? `<button type="button" class="btn btn-primary btn-sm" disabled>Vista previa</button>`
+                : esMia
+                ? `<button type="button" class="btn btn-ghost btn-sm" disabled>Tu herramienta</button>`
+                : h.estado === "Disponible"
+                ? `<button type="button" class="btn btn-primary btn-sm" onclick="uiSolicitar.abrir(${h.idHerramienta})">Solicitar préstamo</button>`
+                : `<button type="button" class="btn btn-ghost btn-sm" disabled>Prestada</button>`
+            }
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  verDetalle(idHerramienta) {
+    const { herramienta, propietario, resenas, valoracion } = ctrlBuscar.obtenerDetallesHerramienta(idHerramienta);
+    document.getElementById("det-id").textContent = `#HERR-${herramienta.idHerramienta}`;
+
+    const htmlResenas = resenas.length
+      ? resenas
+          .map(
+            r => `
+          <div style="padding:0.75rem 0; border-top:1px solid var(--border-color);">
+            <div style="display:flex; justify-content:space-between; font-size:0.84rem;">
+              <strong>${r.autor}</strong>
+              <span style="color:#f59e0b;">${"★".repeat(r.puntuacion)}</span>
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.25rem;">${r.comentario}</p>
+          </div>
+        `
+          )
+          .join("")
+      : `<p style="font-size:0.85rem; color:var(--text-muted);">Todavía no hay reseñas de otros vecinos.</p>`;
+
+    document.getElementById("det-body").innerHTML = `
+      <img src="${herramienta.foto}" onerror="this.src='${FALLBACK_IMG}'" style="width:100%; height:230px; object-fit:cover; border-radius:12px; margin-bottom:1rem;" />
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:0.75rem;">
+        <div>
+          <span class="badge-mono">${herramienta.tipo}</span>
+          <h2 style="font-size:1.3rem; margin-top:0.35rem;">${herramienta.titulo}</h2>
+        </div>
+        <div style="text-align:right;">
+          <strong style="font-size:1.15rem;">${herramienta.precio === 0 ? "Gratis" : herramienta.precio.toFixed(2) + " €/día"}</strong>
+          <div style="font-size:0.8rem; color:var(--text-muted);">★ ${valoracion.total ? valoracion.media : "Nuevo"}</div>
+        </div>
+      </div>
+
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1rem;">${herramienta.descripcion}</p>
+
+      <div style="background:var(--bg-subtle); padding:0.9rem; border-radius:10px; font-size:0.85rem; display:grid; gap:0.45rem; margin-bottom:1.25rem;">
+        <div><strong>Propietario:</strong> ${propietario.nombre} (${propietario.direccion})</div>
+        <div><strong>Entrega habitual:</strong> ${herramienta.disponibilidad}</div>
+        <div><strong>Condiciones:</strong> ${herramienta.condiciones}</div>
+      </div>
+
+      <h4 style="margin-bottom:0.5rem;">Valoraciones de vecinos (${resenas.length})</h4>
+      ${htmlResenas}
+    `;
+    abrirModal("modal-detalle");
+  }
+}
+
+/* ==========================================================================
+   BOUNDARY 2: InterfazPublicarHerramienta (con vista previa en vivo)
+   ========================================================================== */
+class InterfazPublicarHerramienta {
+  constructor() {
+    this.bindEvents();
+    this.actualizarPreview();
+  }
+
+  bindEvents() {
+    ["pub-titulo", "pub-tipo", "pub-descripcion", "pub-precio", "pub-foto"].forEach(id => {
+      document.getElementById(id).addEventListener("input", () => this.actualizarPreview());
+    });
+
+    document.querySelectorAll(".preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.getElementById("pub-foto").value = btn.dataset.url;
+        this.actualizarPreview();
+      });
+    });
+
+    document.getElementById("form-publicar").addEventListener("submit", e => {
+      e.preventDefault();
+      try {
+        ctrlPublicar.publicarHerramienta(ctrlRegistro.vecinoActual.idVecino, {
+          titulo: document.getElementById("pub-titulo").value,
+          tipo: document.getElementById("pub-tipo").value,
+          descripcion: document.getElementById("pub-descripcion").value,
+          precio: document.getElementById("pub-precio").value,
+          disponibilidad: document.getElementById("pub-disponibilidad").value,
+          condiciones: document.getElementById("pub-condiciones").value,
+          foto: document.getElementById("pub-foto").value
+        });
+        e.target.reset();
+        this.actualizarPreview();
+        toast("Herramienta publicada correctamente en el catálogo.");
+        uiBuscar.renderizar();
+        navegarA("buscar");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+  }
+
+  actualizarPreview() {
+    const fakeTool = new Herramienta({
+      idHerramienta: 0,
+      idPropietario: ctrlRegistro.vecinoActual?.idVecino || 1,
+      titulo: document.getElementById("pub-titulo").value || "Título de tu herramienta",
+      tipo: document.getElementById("pub-tipo").value,
+      descripcion: document.getElementById("pub-descripcion").value || "Aquí aparecerá la descripción y accesorios incluidos...",
+      precio: document.getElementById("pub-precio").value || 0,
+      foto: document.getElementById("pub-foto").value || FALLBACK_IMG
+    });
+    document.getElementById("publish-live-preview").innerHTML = uiBuscar.generarTarjetaHTML(fakeTool, true);
+  }
+}
+
+/* ==========================================================================
+   BOUNDARY 3: InterfazSolicitarPrestamo
+   ========================================================================== */
+class InterfazSolicitarPrestamo {
+  constructor() {
+    this.herramientaSeleccionada = null;
+    ["sol-fecha-inicio", "sol-fecha-fin"].forEach(id => {
+      document.getElementById(id).addEventListener("change", () => this.calcularCoste());
+    });
+
+    document.getElementById("form-solicitar").addEventListener("submit", e => {
+      e.preventDefault();
+      try {
+        ctrlSolicitar.solicitarPrestamo(
+          parseInt(document.getElementById("sol-id-herramienta").value),
+          ctrlRegistro.vecinoActual.idVecino,
+          document.getElementById("sol-fecha-inicio").value,
+          document.getElementById("sol-fecha-fin").value,
+          document.getElementById("sol-mensaje").value
+        );
+        cerrarModal("modal-solicitar");
+        e.target.reset();
+        toast("Solicitud enviada al propietario.");
+        uiGestionar.renderizar();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+  }
+
+  abrir(idHerramienta) {
+    const h = RepositorioSistema.herramientas.find(item => item.idHerramienta === idHerramienta);
+    const prop = RepositorioSistema.vecinos.find(v => v.idVecino === h.idPropietario);
+    this.herramientaSeleccionada = h;
+
+    document.getElementById("sol-id-herramienta").value = h.idHerramienta;
+    document.getElementById("sol-tool-summary").innerHTML = `
+      <img src="${h.foto}" onerror="this.src='${FALLBACK_IMG}'" />
+      <div>
+        <strong>${h.titulo}</strong>
+        <div style="font-size:0.8rem; color:var(--text-secondary);">Propietario: ${prop.nombre} (${prop.direccion})</div>
+      </div>
+    `;
+
+    const hoy = new Date().toISOString().split("T")[0];
+    document.getElementById("sol-fecha-inicio").value = hoy;
+    document.getElementById("sol-fecha-fin").value = hoy;
+    this.calcularCoste();
+    abrirModal("modal-solicitar");
+  }
+
+  calcularCoste() {
+    if (!this.herramientaSeleccionada) return;
+    const f1 = new Date(document.getElementById("sol-fecha-inicio").value);
+    const f2 = new Date(document.getElementById("sol-fecha-fin").value);
+    const dias = Math.max(1, Math.round((f2 - f1) / (1000 * 60 * 60 * 24)) + 1);
+    const total = (dias * this.herramientaSeleccionada.precio).toFixed(2);
+
+    document.getElementById("sol-cost-box").innerHTML = `
+      <span>Duración estimada: <strong>${dias} ${dias === 1 ? "día" : "días"}</strong></span>
+      <span>Total estimado: <strong>${this.herramientaSeleccionada.precio === 0 ? "0,00 € (Gratis)" : total + " €"}</strong></span>
+    `;
+  }
+}
+
+/* ==========================================================================
+   BOUNDARY 4: InterfazGestionarSolicitudes (Solicitudes, Ampliaciones, Devolución, Incidencias)
+   ========================================================================== */
+class InterfazGestionarSolicitudes {
+  constructor() {
+    this.tabActiva = "recibidas";
+    this.bindEvents();
+  }
+
+  bindEvents() {
+    document.querySelectorAll("#loans-tabs .seg-tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#loans-tabs .seg-tab").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        this.tabActiva = btn.dataset.tab;
+        this.renderizar();
+      });
+    });
+
+    // Chips rápidos de rechazo
+    document.querySelectorAll("#reject-chips .chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        document.getElementById("rec-motivo").value = chip.dataset.reason;
+      });
+    });
+
+    document.getElementById("form-rechazar").addEventListener("submit", e => {
+      e.preventDefault();
+      ctrlGestionar.rechazarSolicitud(
+        parseInt(document.getElementById("rec-id-solicitud").value),
+        document.getElementById("rec-motivo").value
+      );
+      cerrarModal("modal-rechazar");
+      toast("Solicitud rechazada.");
+      this.renderizar();
+    });
+
+    document.getElementById("form-ampliar").addEventListener("submit", e => {
+      e.preventDefault();
+      try {
+        ctrlGestionar.solicitarAmpliacion(
+          parseInt(document.getElementById("amp-id-prestamo").value),
+          document.getElementById("amp-nueva-fecha").value,
+          document.getElementById("amp-motivo").value
+        );
+        cerrarModal("modal-ampliar");
+        toast("Solicitud de ampliación enviada al propietario.");
+        this.renderizar();
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+
+    // Selector de estrellas interactivo
+    document.querySelectorAll("#star-picker .star-btn").forEach(star => {
+      star.addEventListener("click", () => {
+        const val = parseInt(star.dataset.val);
+        document.getElementById("dev-puntuacion").value = val;
+        document.querySelectorAll("#star-picker .star-btn").forEach(s => {
+          s.classList.toggle("active", parseInt(s.dataset.val) <= val);
+        });
+      });
+    });
+
+    document.getElementById("form-devolver").addEventListener("submit", e => {
+      e.preventDefault();
+      ctrlGestionar.finalizarPrestamo(
+        parseInt(document.getElementById("dev-id-prestamo").value),
+        document.getElementById("dev-puntuacion").value,
+        document.getElementById("dev-comentario").value,
+        document.getElementById("dev-observaciones").value
+      );
+      cerrarModal("modal-devolver");
+      e.target.reset();
+      toast("Herramienta devuelta y valoración publicada.");
+      this.renderizar();
+      uiBuscar.renderizar();
+    });
+
+    document.getElementById("form-incidencia").addEventListener("submit", e => {
+      e.preventDefault();
+      ctrlGestionar.registrarIncidencia(
+        parseInt(document.getElementById("inc-id-prestamo").value),
+        ctrlRegistro.vecinoActual.idVecino,
+        document.getElementById("inc-gravedad").value,
+        document.getElementById("inc-descripcion").value
+      );
+      cerrarModal("modal-incidencia");
+      e.target.reset();
+      toast("Parte de incidencia registrado.", "error");
+      this.renderizar();
+      renderizarComunidad();
+    });
+  }
+
+  renderizar() {
+    const idUser = ctrlRegistro.vecinoActual.idVecino;
+    const recibidas = ctrlGestionar.consultarSolicitudesPendientes(idUser);
+    const enviadas = RepositorioSistema.solicitudes.filter(s => s.idVecinoSolicitante === idUser);
+    const activos = RepositorioSistema.prestamos.filter(p => {
+      const h = RepositorioSistema.herramientas.find(item => item.idHerramienta === p.idHerramienta);
+      return p.estado === "Activo" && (p.idPrestatario === idUser || h?.idPropietario === idUser);
+    });
+    const historial = RepositorioSistema.prestamos.filter(p => {
+      const h = RepositorioSistema.herramientas.find(item => item.idHerramienta === p.idHerramienta);
+      return p.estado === "Finalizado" && (p.idPrestatario === idUser || h?.idPropietario === idUser);
+    });
+
+    // Actualizar contadores
+    document.getElementById("badge-pendientes").textContent = recibidas.length + activos.length;
+    document.getElementById("count-recibidas").textContent = recibidas.length;
+    document.getElementById("count-activos").textContent = activos.length;
+    document.getElementById("count-enviadas").textContent = enviadas.length;
+    document.getElementById("count-historial").textContent = historial.length;
+
+    const container = document.getElementById("loans-tab-content");
+
+    if (this.tabActiva === "recibidas") {
+      container.innerHTML = recibidas.length
+        ? recibidas
+            .map(s => {
+              const h = RepositorioSistema.herramientas.find(i => i.idHerramienta === s.idHerramienta);
+              const sol = RepositorioSistema.vecinos.find(v => v.idVecino === s.idVecinoSolicitante);
+              return `
+                <div class="loan-row-card">
+                  <div class="loan-main">
+                    <div class="loan-header-line">
+                      <strong>${h.titulo}</strong>
+                      <span class="pill-tag pending">Pendiente de aprobar</span>
+                      <span class="badge-mono">${s.fechaInicio} → ${s.fechaFin}</span>
+                    </div>
+                    <div style="font-size:0.84rem; color:var(--text-secondary);">
+                      Solicitado por <strong>${sol.nombre}</strong> (${sol.direccion})
+                    </div>
+                    <div class="loan-quote">"${s.mensaje}"</div>
+                  </div>
+                  <div class="loan-actions">
+                    <button class="btn btn-primary btn-sm" onclick="uiGestionar.aceptar(${s.idSolicitud})">Aceptar préstamo</button>
+                    <button class="btn btn-danger-outline btn-sm" onclick="uiGestionar.abrirRechazar(${s.idSolicitud})">Rechazar</button>
+                  </div>
+                </div>
+              `;
+            })
+            .join("")
+        : `<div class="empty-state"><i data-lucide="inbox"></i><h3>Bandeja al día</h3><p>No tienes solicitudes pendientes de revisión.</p></div>`;
+    }
+
+    if (this.tabActiva === "activos") {
+      container.innerHTML = activos.length
+        ? activos
+            .map(p => {
+              const h = RepositorioSistema.herramientas.find(i => i.idHerramienta === p.idHerramienta);
+              const esPrestatario = p.idPrestatario === idUser;
+              const otro = RepositorioSistema.vecinos.find(
+                v => v.idVecino === (esPrestatario ? h.idPropietario : p.idPrestatario)
+              );
+              const ampPendiente = RepositorioSistema.ampliaciones.find(
+                a => a.idPrestamo === p.idPrestamo && a.estado === "Pendiente"
+              );
+
+              return `
+                <div class="loan-row-card">
+                  <div class="loan-main">
+                    <div class="loan-header-line">
+                      <strong>${h.titulo}</strong>
+                      <span class="pill-tag active-loan">${esPrestatario ? "La tienes prestada" : "Prestada a vecino"}</span>
+                      <span class="badge-mono">Devolución: ${p.fechaFin}</span>
+                    </div>
+                    <div style="font-size:0.84rem; color:var(--text-secondary);">
+                      ${esPrestatario ? "Propietario" : "Prestatario"}: <strong>${otro.nombre}</strong> (${otro.direccion})
+                    </div>
+                    ${
+                      ampPendiente
+                        ? `<div class="extension-banner">
+                             <div><strong>Ampliación solicitada hasta ${ampPendiente.nuevaFechaFin}:</strong> "${ampPendiente.motivo}"</div>
+                             ${
+                               !esPrestatario
+                                 ? `<div style="display:flex; gap:0.4rem;">
+                                      <button class="btn btn-primary btn-sm" onclick="uiGestionar.responderAmpliacion(${ampPendiente.idAmpliacion}, true)">Autorizar</button>
+                                      <button class="btn btn-danger-outline btn-sm" onclick="uiGestionar.responderAmpliacion(${ampPendiente.idAmpliacion}, false)">Denegar</button>
+                                    </div>`
+                                 : `<span class="badge-mono">Esperando respuesta</span>`
+                             }
+                           </div>`
+                        : ""
+                    }
+                  </div>
+                  <div class="loan-actions">
+                    ${
+                      esPrestatario
+                        ? `<button class="btn btn-outline btn-sm" onclick="uiGestionar.abrirAmpliar(${p.idPrestamo})">Ampliar plazo</button>
+                           <button class="btn btn-primary btn-sm" onclick="uiGestionar.abrirDevolver(${p.idPrestamo})">Devolver y valorar</button>`
+                        : ""
+                    }
+                    <button class="btn btn-danger-outline btn-sm" onclick="uiGestionar.abrirIncidencia(${p.idPrestamo})">Incidencia</button>
+                  </div>
+                </div>
+              `;
+            })
+            .join("")
+        : `<div class="empty-state"><i data-lucide="calendar-check"></i><h3>Sin préstamos en curso</h3><p>Cuando aceptes una solicitud o te presten una herramienta aparecerá aquí.</p></div>`;
+    }
+
+    if (this.tabActiva === "enviadas") {
+      container.innerHTML = enviadas.length
+        ? enviadas
+            .map(s => {
+              const h = RepositorioSistema.herramientas.find(i => i.idHerramienta === s.idHerramienta);
+              const claseEstado =
+                s.estado === "Aceptada" ? "done" : s.estado === "Rechazada" ? "rejected" : "pending";
+              return `
+                <div class="loan-row-card">
+                  <div class="loan-main">
+                    <div class="loan-header-line">
+                      <strong>${h.titulo}</strong>
+                      <span class="pill-tag ${claseEstado}">${s.estado}</span>
+                      <span class="badge-mono">${s.fechaInicio} → ${s.fechaFin}</span>
+                    </div>
+                    <p style="font-size:0.84rem; color:var(--text-secondary);">Tu mensaje: "${s.mensaje}"</p>
+                    ${s.motivoRechazo ? `<p style="font-size:0.83rem; color:var(--danger); margin-top:0.35rem;">Motivo: ${s.motivoRechazo}</p>` : ""}
+                  </div>
+                </div>
+              `;
+            })
+            .join("")
+        : `<div class="empty-state"><i data-lucide="send"></i><h3>No has enviado solicitudes</h3><p>Explora el catálogo para pedir herramientas a tus vecinos.</p></div>`;
+    }
+
+    if (this.tabActiva === "historial") {
+      container.innerHTML = historial.length
+        ? historial
+            .map(p => {
+              const h = RepositorioSistema.herramientas.find(i => i.idHerramienta === p.idHerramienta);
+              return `
+                <div class="loan-row-card">
+                  <div class="loan-main">
+                    <div class="loan-header-line">
+                      <strong>${h.titulo}</strong>
+                      <span class="pill-tag done">Finalizado</span>
+                      <span class="badge-mono">${p.fechaInicio} → ${p.fechaFin}</span>
+                    </div>
+                    <p style="font-size:0.84rem; color:var(--text-secondary);">Observaciones: ${p.observaciones}</p>
+                  </div>
+                </div>
+              `;
+            })
+            .join("")
+        : `<div class="empty-state"><i data-lucide="history"></i><h3>Historial vacío</h3><p>Aún no hay préstamos finalizados.</p></div>`;
+    }
+
+    lucide.createIcons();
+  }
+
+  aceptar(idSolicitud) {
+    try {
+      ctrlGestionar.aceptarSolicitud(idSolicitud);
+      toast("Solicitud aceptada. Préstamo iniciado.");
+      this.renderizar();
+      uiBuscar.renderizar();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }
+
+  abrirRechazar(idSolicitud) {
+    document.getElementById("rec-id-solicitud").value = idSolicitud;
+    abrirModal("modal-rechazar");
+  }
+
+  abrirAmpliar(idPrestamo) {
+    document.getElementById("amp-id-prestamo").value = idPrestamo;
+    abrirModal("modal-ampliar");
+  }
+
+  responderAmpliacion(idAmpliacion, aprobar) {
+    ctrlGestionar.responderAmpliacion(idAmpliacion, aprobar);
+    toast(aprobar ? "Ampliación de plazo autorizada." : "Ampliación denegada.");
+    this.renderizar();
+  }
+
+  abrirDevolver(idPrestamo) {
+    document.getElementById("dev-id-prestamo").value = idPrestamo;
+    abrirModal("modal-devolver");
+  }
+
+  abrirIncidencia(idPrestamo) {
+    document.getElementById("inc-id-prestamo").value = idPrestamo;
+    abrirModal("modal-incidencia");
+  }
+}
+
+/* ==========================================================================
+   BOUNDARY 5: InterfazConfiguracion (Tema Oscuro, Acentos, Perfil, Registro)
+   ========================================================================== */
+class InterfazConfiguracion {
+  constructor() {
+    this.cargarPreferenciasVisuales();
+    this.bindEvents();
+  }
+
+  cargarPreferenciasVisuales() {
+    const theme = localStorage.getItem("ph_theme") || "light";
+    const accent = localStorage.getItem("ph_accent") || "amber";
+    this.aplicarTema(theme);
+    this.aplicarAcento(accent);
+  }
+
+  aplicarTema(theme) {
+    localStorage.setItem("ph_theme", theme);
+    const resolved =
+      theme === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : theme;
+
+    document.documentElement.setAttribute("data-theme", resolved);
+
+    document.querySelectorAll(".theme-option").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.themeVal === theme);
+    });
+
+    const icon = document.getElementById("theme-icon");
+    if (icon) {
+      icon.setAttribute("data-lucide", resolved === "dark" ? "sun" : "moon");
+      lucide.createIcons();
+    }
+  }
+
+  aplicarAcento(accent) {
+    localStorage.setItem("ph_accent", accent);
+    document.documentElement.setAttribute("data-accent", accent);
+    document.querySelectorAll(".swatch").forEach(sw => {
+      sw.classList.toggle("active", sw.dataset.accentVal === accent);
+    });
+  }
+
+  rellenarFormularioPerfil() {
+    const v = ctrlRegistro.vecinoActual;
+    if (!v) return;
+    document.getElementById("cfg-nombre").value = v.nombre;
+    document.getElementById("cfg-direccion").value = v.direccion;
+    document.getElementById("cfg-email").value = v.email;
+  }
+
+  bindEvents() {
+    document.querySelectorAll(".theme-option").forEach(btn => {
+      btn.addEventListener("click", () => this.aplicarTema(btn.dataset.themeVal));
+    });
+
+    document.getElementById("btn-quick-theme").addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme");
+      this.aplicarTema(current === "dark" ? "light" : "dark");
+    });
+
+    document.querySelectorAll(".swatch").forEach(sw => {
+      sw.addEventListener("click", () => this.aplicarAcento(sw.dataset.accentVal));
+    });
+
+    document.getElementById("form-perfil").addEventListener("submit", e => {
+      e.preventDefault();
+      ctrlRegistro.actualizarPerfil(
+        ctrlRegistro.vecinoActual.idVecino,
+        document.getElementById("cfg-nombre").value,
+        document.getElementById("cfg-direccion").value,
+        document.getElementById("cfg-email").value
+      );
+      sincronizarUsuarioUI();
+      uiBuscar.renderizar();
+      toast("Perfil actualizado.");
+    });
+
+    document.getElementById("form-registro-vecino").addEventListener("submit", e => {
+      e.preventDefault();
+      try {
+        const nuevo = ctrlRegistro.registrarVecino(
+          {
+            nombre: document.getElementById("reg-nombre").value,
+            direccion: document.getElementById("reg-direccion").value,
+            email: document.getElementById("reg-email").value,
+            contrasena: document.getElementById("reg-pass").value
+          },
+          document.getElementById("reg-terminos").checked
+        );
+        e.target.reset();
+        sincronizarUsuarioUI();
+        uiBuscar.renderizar();
+        toast(`Vecino ${nuevo.nombre} registrado y activo.`);
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    });
+
+    document.getElementById("btn-reset-demo").addEventListener("click", () => {
+      localStorage.removeItem(RepositorioSistema.STORAGE_KEY);
+      RepositorioSistema.cargar();
+      ctrlRegistro.inicializarSesion();
+      sincronizarUsuarioUI();
+      uiBuscar.renderizar();
+      uiGestionar.renderizar();
+      renderizarComunidad();
+      toast("Datos de demostración restaurados.");
+    });
+  }
+}
+
+/* ==========================================================================
+   NAVEGACIÓN Y SINCRONIZACIÓN GLOBAL
+   ========================================================================== */
+const TITULOS_VISTAS = {
+  buscar: "Explorar catálogo",
+  publicar: "Publicar herramienta",
+  solicitudes: "Préstamos y solicitudes",
+  incidencias: "Incidencias y comunidad",
+  configuracion: "Configuración y aspecto"
+};
+
+function navegarA(vista) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+
+  document.getElementById(`view-${vista}`).classList.add("active");
+  const navBtn = document.querySelector(`.nav-item[data-view="${vista}"]`);
+  if (navBtn) navBtn.classList.add("active");
+
+  document.getElementById("topbar-title").textContent = TITULOS_VISTAS[vista] || vista;
+  document.getElementById("sidebar").classList.remove("open");
+
+  if (vista === "solicitudes") uiGestionar.renderizar();
+  if (vista === "incidencias") renderizarComunidad();
+  if (vista === "configuracion") uiConfig.rellenarFormularioPerfil();
+}
+
+function sincronizarUsuarioUI() {
+  const select = document.getElementById("quick-user-select");
+  select.innerHTML = RepositorioSistema.vecinos
+    .map(v => `<option value="${v.idVecino}">${v.nombre} (${v.direccion})</option>`)
+    .join("");
+  select.value = ctrlRegistro.vecinoActual.idVecino;
+
+  const v = ctrlRegistro.vecinoActual;
+  document.getElementById("sidebar-user-card").innerHTML = `
+    <div class="avatar">${v.obtenerIniciales()}</div>
+    <div class="user-meta">
+      <strong>${v.nombre}</strong>
+      <span>${v.direccion}</span>
+    </div>
+  `;
+  uiConfig.rellenarFormularioPerfil();
+  uiPublicar.actualizarPreview();
+}
+
+function renderizarComunidad() {
+  const badgeInc = document.getElementById("badge-incidencias");
+  badgeInc.style.display = RepositorioSistema.incidencias.length ? "inline-block" : "none";
+  badgeInc.textContent = RepositorioSistema.incidencias.length;
+
+  const contInc = document.getElementById("lista-incidencias");
+  contInc.innerHTML = RepositorioSistema.incidencias.length
+    ? RepositorioSistema.incidencias
+        .map(inc => {
+          const rep = RepositorioSistema.vecinos.find(v => v.idVecino === inc.idReportante);
+          return `
+            <div style="padding:0.9rem; border-radius:10px; background:var(--bg-subtle); border-left:3px solid var(--danger);">
+              <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+                <strong>Gravedad: ${inc.gravedad}</strong>
+                <span class="badge-mono">${inc.fecha}</span>
+              </div>
+              <p style="font-size:0.86rem;">${inc.descripcion}</p>
+              <small style="color:var(--text-muted);">Reportado por ${rep?.nombre || "Vecino"}</small>
+            </div>
+          `;
+        })
+        .join("")
+    : `<p style="font-size:0.86rem; color:var(--text-muted);">No hay incidencias abiertas en la comunidad. ¡Buen trabajo!</p>`;
+
+  document.getElementById("lista-vecinos-comunidad").innerHTML = RepositorioSistema.vecinos
+    .map(v => {
+      const numHerr = RepositorioSistema.herramientas.filter(h => h.idPropietario === v.idVecino).length;
+      return `
+        <div class="user-card" style="justify-content:space-between;">
+          <div style="display:flex; align-items:center; gap:0.65rem;">
+            <div class="avatar">${v.obtenerIniciales()}</div>
+            <div class="user-meta">
+              <strong>${v.nombre}</strong>
+              <span>${v.direccion}</span>
+            </div>
+          </div>
+          <span class="badge-mono">${numHerr} herr.</span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+// ARRANQUE DE LA APLICACIÓN
+RepositorioSistema.cargar();
+ctrlRegistro.inicializarSesion();
+
+const uiBuscar = new InterfazBuscarHerramientas();
+const uiPublicar = new InterfazPublicarHerramienta();
+const uiSolicitar = new InterfazSolicitarPrestamo();
+const uiGestionar = new InterfazGestionarSolicitudes();
+const uiConfig = new InterfazConfiguracion();
+
+document.querySelectorAll(".nav-item").forEach(btn => {
+  btn.addEventListener("click", () => navegarA(btn.dataset.view));
+});
+
+document.querySelectorAll("[data-close-modal]").forEach(btn => {
+  btn.addEventListener("click", () => cerrarModal(btn.dataset.closeModal));
+});
+
+document.getElementById("quick-user-select").addEventListener("change", e => {
+  const v = ctrlRegistro.cambiarVecinoActivo(e.target.value);
+  sincronizarUsuarioUI();
+  uiBuscar.renderizar();
+  uiGestionar.renderizar();
+  toast(`Has cambiado al perfil de ${v.nombre}`);
+});
+
+document.getElementById("btn-open-sidebar").addEventListener("click", () => {
+  document.getElementById("sidebar").classList.add("open");
+});
+document.getElementById("btn-close-sidebar").addEventListener("click", () => {
+  document.getElementById("sidebar").classList.remove("open");
+});
+
+sincronizarUsuarioUI();
+uiBuscar.renderizar();
+uiGestionar.renderizar();
+renderizarComunidad();
+lucide.createIcons();
